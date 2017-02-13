@@ -1,0 +1,1 @@
+#define EXTDEMO 42
