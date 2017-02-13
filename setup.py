@@ -1,5 +1,5 @@
 name = 'buildout.wheel'
-version = '0.1.2'
+version = '0.1.3.dev0'
 
 install_requires = [
     'zc.buildout >=2.8', 'setuptools', 'wheel', 'humpty', 'six']
