@@ -2,6 +2,7 @@ include *.rst
 include LICENSE.txt
 include buildout.cfg
 include shootout.cfg
-prune doc
-recursive-include src *.xml
+recursive-include src *.c
+recursive-include src *.h
+recursive-include src *.py
 
