@@ -1,7 +1,8 @@
-name, version = 'buildout.wheel', '0'
+name = 'buildout.wheel'
+version = '0'
 
-install_requires = ['setuptools', 'wheel', 'humpty', 'six']
-extras_require = dict(test=['manuel', 'mock', 'zope.testing'])
+install_requires = ['zc.buildout', 'setuptools', 'wheel', 'humpty', 'six']
+extras_require = dict(test=[])
 
 entry_points = """
 [zc.buildout.extension]
@@ -17,7 +18,8 @@ setup(
     author_email = 'jim@jimfulton.info',
     license = 'MIT',
 
-    name = name, version = version,
+    name = name,
+    version = version,
     long_description = long_description,
     description = long_description.strip().split('\n')[1],
     packages = [name.split('.')[0], name],
@@ -31,4 +33,22 @@ setup(
     tests_require = extras_require['test'],
     test_suite = name+'.tests.test_suite',
     include_package_data = True,
+
+    keywords = "development build",
+    classifiers = [
+        'Development Status :: 5 - Production/Stable',
+        'Framework :: Buildout',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: MIT',
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Topic :: Software Development :: Build Tools',
+        'Topic :: Software Development :: Libraries :: Python Modules',
+       ],
+
     )
