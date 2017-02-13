@@ -64,4 +64,3 @@ def load(buildout):
     setuptools.package_index.EXTENSIONS.append('.whl')
     setuptools.package_index.interpret_distro_name = interpret_distro_name
     zc.buildout.easy_install.wheel_to_egg = wheel_to_egg
-    buildout['buildout']['abi-tag-eggs'] = 'true'
