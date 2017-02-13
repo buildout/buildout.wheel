@@ -1,7 +1,6 @@
 language: python
 sudo: false
 python:
-  - pypy-5.4.1
   - 2.7
   - 3.6
   - 3.5
@@ -16,4 +15,3 @@ cache:
     - eggs
 before_cache:
     - rm -f $HOME/.cache/pip/log/debug.log
-
