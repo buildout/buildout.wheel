@@ -17,7 +17,7 @@ long_description = open('README.rst').read() + '\n' + open('CHANGES.rst').read()
 setup(
     author = 'Jim Fulton',
     author_email = 'jim@jimfulton.info',
-    license = 'MIT',
+    license = 'MIT License',
     url='https://pypi.python.org/pypi/buildout.wheel',
 
     name = name,
