@@ -2,7 +2,7 @@
 Changes
 =======
 
-0.1.1 (unreleased)
+0.1.1 (2017-02-13)
 ==================
 
 - Fixed a packaging bug.
