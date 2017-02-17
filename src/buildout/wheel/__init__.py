@@ -44,8 +44,9 @@ def interpret_distro_name(
                 return orig_interpret_distro_name(
                     location, wf.distinfo_name[:-10], metadata,
                     py_version=py_version,
-                    precedence=3, # 0 because we want wheels to be
-                                  # prefered over source
+                    # EGG_DIST since we want wheels to be prefered over source,
+                    # and we'll turn them into eggs anyway:
+                    precedence=pkg_resources.EGG_DIST,
                     platform=platform)
             else:
                 # Not a match, short circuit:
