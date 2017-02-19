@@ -2,3 +2,5 @@
 bin
 develop-eggs
 dist
+*.pyc
+*.egg-info
