@@ -18,8 +18,7 @@ setup(
     author = 'Jim Fulton',
     author_email = 'jim@jimfulton.info',
     license = 'MIT License',
-    url='https://pypi.python.org/pypi/buildout.wheel',
-
+    url='https://github.com/buildout/buildout.wheel',
     name = name,
     version = version,
     long_description = long_description,
