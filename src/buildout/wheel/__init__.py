@@ -1,17 +1,29 @@
-import distlib.wheel
-import humpty
 import os
+import os.path
+import shutil
+import sys
 import pkg_resources
 import setuptools.package_index
 import wheel.install
 import wheel.decorator
 import pip.pep425tags
 import zc.buildout.easy_install
+import distutils.command.install
+
+NAMESPACE_STUB_PATH = os.path.join(os.path.dirname(__file__),
+                                   'namespace_stub.py')
+assert os.path.isfile(NAMESPACE_STUB_PATH)
 
 orig_distros_for_location = setuptools.package_index.distros_for_location
 original_wheel_to_egg = zc.buildout.easy_install.wheel_to_egg
 
-wheel_supported = pip.pep425tags.get_supported
+class SelfDestructingEgg(pkg_resources.Distribution):
+    """Since the location for creating the egg is inside the download directory
+    We must self destruct to avoid having both the wheel and the generated egg
+    there at the same time."""
+    def __del__(self):
+        shutil.rmtree(self.location)
+
 class WheelFile(wheel.install.WheelFile):
 
     def __init__(self, *args, **kwargs):
@@ -19,11 +31,44 @@ class WheelFile(wheel.install.WheelFile):
         kwargs.setdefault('context', pip.pep425tags.get_supported)
         super(WheelFile, self).__init__(*args, **kwargs)
 
+    def lay_egg_into(self, target):
+        join = os.path.join
+        # drop everything inside the metadata directory, keyed by section name,
+        # except the code itself
+        location = join(target, self.egg_name)
+        overrides = {
+            key: (location if key in ('platlib', 'purelib')
+                    else join(location, self.distinfo_name, key))
+            for key in distutils.command.install.SCHEME_KEYS
+        }
+        self.install(overrides=overrides)
+        # pkg_resources special-cases directories in sys.path with `.egg`
+        # extension and expect their metadata directory to be called EGG-INFO
+        # instead of the `[name]-[version].dist-info` directory of wheels.
+        egg_info_location = join(location, 'EGG-INFO')
+        os.rename(join(location, self.distinfo_name), egg_info_location)
+        # See docstring of SelfDestructingEgg above for why it's needed:
+        metadata = pkg_resources.PathMetadata(location, egg_info_location)
+        egg = self.distribution(location, metadata=metadata,
+                                class_=SelfDestructingEgg)
+        # Fix namespaces with missing __init__
+        if (sys.version_info < (3, 3) and
+                egg.has_metadata('namespace_packages.txt')):
+            for namespace in egg.get_metadata_lines('namespace_packages.txt'):
+                __init__filename = namespace.split('.') + ['__init__.py']
+                dest = join(location, *__init__filename)
+                if not os.path.exists(dest):
+                    shutil.copyfile(NAMESPACE_STUB_PATH, dest)
+        return egg
+
+    @wheel.decorator.reify
+    def egg_name(self):
+        return self.distribution().egg_name() + '.egg'
+
     @wheel.decorator.reify
     def is_platform_specific(self):
         return (self.parsed_filename.group('abi') != 'none' or
                 self.parsed_filename.group('plat') != 'any')
-
 
     @wheel.decorator.reify
     def egg_platform(self):
@@ -66,13 +111,9 @@ def distros_for_location(location, basename, metadata=None):
     return orig_distros_for_location(location, basename, metadata=metadata)
 
 def wheel_to_egg(dist, tmp):
-    writer = humpty.EggWriter(dist.location)
-    writer.build_egg(tmp)
-    egg_name = writer.egg_name
-    return pkg_resources.Distribution.from_location(
-        os.path.join(tmp, egg_name), egg_name)
+    wf = WheelFile(dist.location)
+    return wf.lay_egg_into(tmp)
 
 def load(buildout):
-    distlib.wheel.COMPATIBLE_TAGS = set(wheel_supported())
     setuptools.package_index.distros_for_location = distros_for_location
     zc.buildout.easy_install.wheel_to_egg = wheel_to_egg

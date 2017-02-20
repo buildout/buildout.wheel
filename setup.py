@@ -2,7 +2,7 @@ name = 'buildout.wheel'
 version = '0.1.3.dev0'
 
 install_requires = [
-    'zc.buildout >=2.8', 'setuptools', 'wheel', 'humpty', 'six', 'pip']
+    'zc.buildout >=2.8', 'setuptools', 'wheel', 'six', 'pip']
 extras_require = dict(test=[])
 
 entry_points = """
