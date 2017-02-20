@@ -2,6 +2,7 @@ import os
 import os.path
 import shutil
 import sys
+import tempfile
 import pkg_resources
 import setuptools.package_index
 import wheel.install
@@ -17,12 +18,13 @@ assert os.path.isfile(NAMESPACE_STUB_PATH)
 orig_distros_for_location = setuptools.package_index.distros_for_location
 original_wheel_to_egg = zc.buildout.easy_install.wheel_to_egg
 
-class SelfDestructingEgg(pkg_resources.Distribution):
+class SelfDestructingDistro(pkg_resources.Distribution):
     """Since the location for creating the egg is inside the download directory
-    We must self destruct to avoid having both the wheel and the generated egg
-    there at the same time."""
+    which could be the download cache, this wheel was created in a tempdir
+    inside it and we must take it down to avoid leaving garbage around.
+    """
     def __del__(self):
-        shutil.rmtree(self.location)
+        shutil.rmtree(os.path.dirname(self.location))
 
 class WheelFile(wheel.install.WheelFile):
 
@@ -33,12 +35,13 @@ class WheelFile(wheel.install.WheelFile):
 
     def lay_egg_into(self, target):
         join = os.path.join
+        dest = tempfile.mkdtemp(dir=target)
+        location = join(dest, self.egg_name)
         # drop everything inside the metadata directory, keyed by section name,
-        # except the code itself
-        location = join(target, self.egg_name)
+        # except the code itself:
         overrides = {
             key: (location if key in ('platlib', 'purelib')
-                    else join(location, self.distinfo_name, key))
+                  else join(location, self.distinfo_name, key))
             for key in distutils.command.install.SCHEME_KEYS
         }
         self.install(overrides=overrides)
@@ -47,10 +50,10 @@ class WheelFile(wheel.install.WheelFile):
         # instead of the `[name]-[version].dist-info` directory of wheels.
         egg_info_location = join(location, 'EGG-INFO')
         os.rename(join(location, self.distinfo_name), egg_info_location)
-        # See docstring of SelfDestructingEgg above for why it's needed:
+        # See docstring of SelfDestructingDistro above for why it's needed:
         metadata = pkg_resources.PathMetadata(location, egg_info_location)
         egg = self.distribution(location, metadata=metadata,
-                                class_=SelfDestructingEgg)
+                                class_=SelfDestructingDistro)
         # Fix namespaces with missing __init__
         if (sys.version_info < (3, 3) and
                 egg.has_metadata('namespace_packages.txt')):
