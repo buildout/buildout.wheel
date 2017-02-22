@@ -8,6 +8,9 @@ extras_require = dict(test=[])
 entry_points = """
 [zc.buildout.extension]
 wheel = buildout.wheel:load
+
+[zc.buildout.unloadextension]
+wheel = buildout.wheel:unload
 """
 
 from setuptools import setup
