@@ -69,7 +69,7 @@ class Installer(orig_Installer):
     """
     zc.buildout.easy_install.Installer class that feeds all dists in
     `eggs-directory` to `pkg_resources.Environment`, not just the eggs that
-    `Environment` would auto-detect.
+    `Environment` would auto-detect, and knows how to install `wheels`.
     """
 
     def __init__(self, *args, **kwargs):
@@ -77,6 +77,23 @@ class Installer(orig_Installer):
         # Sorry to throw away all the previous hard work creating self._env
         # but we need to replace it with our special Environment.
         self._env = Environment(self._path, dest=self._dest)
+
+    def _call_easy_install(self, spec, ws, dest, dist):
+        if not spec.endswith('.whl'):
+            return orig_Installer._call_easy_install(spec, ws, dest, dist)
+        tmp = tempfile.mkdtemp(dir=dest)
+        try:
+            # this causes the dist tree to be written twice in tempdirs inside
+            # `dest`, but the alternative would be to trick
+            # `setuptools.archive_util.unpack_archive` into unpacking wheels
+            # which requirs dealing with
+            # `setuptools.archive_util.unpack_archive.default_filter`.
+            dist = WheelDir(spec).install_into(tmp)
+            move = zc.buildout.easy_install._move_to_eggs_dir_and_compile
+            newloc = move(dist, dest)
+            return pkg_resources.Environment([newloc])[dist.project_name]
+        finally:
+            shutil.rmtree(tmp)
 
 
 class WheelDir(wheel.install.WheelFile):
@@ -119,7 +136,9 @@ class WheelDir(wheel.install.WheelFile):
         if (sys.version_info < (3, 3) and
                 metadata.has_metadata('namespace_packages.txt')):
             self._plant_namespace_declarations(location, metadata)
-        return self.distribution(location, metadata=metadata)
+        # The installed distribution is egg-like to please buildout
+        return self.distribution(location, metadata=metadata,
+                                 precedence=pkg_resources.EGG_DIST)
 
     def _plant_namespace_declarations(self, root, metadata):
         base = [root]
@@ -148,7 +167,8 @@ class WheelDir(wheel.install.WheelFile):
             info['plat'] = 'incompatible'
         return info
 
-    def distribution(self, location=None, metadata=None):
+    def distribution(self, location=None, metadata=None,
+                     precedence=pkg_resources.BINARY_DIST):
         info = self.distribution_info
         return pkg_resources.DistInfoDistribution(
             location=location if location is not None else self.filename,
@@ -158,7 +178,7 @@ class WheelDir(wheel.install.WheelFile):
             platform=info['plat'],
             # trick buildout into believing this dist is an egg with anoter
             # extension so it copies the dist into `eggs-directory`:
-            precedence=pkg_resources.EGG_DIST,
+            precedence=precedence,
         )
 
 
@@ -175,7 +195,7 @@ def distros_for_location(location, basename, metadata=None):
             pass
         else:
             if wf.compatible:
-                # It's a match. Treat it as an egg-like
+                # It's a match. Treat it as a binary
                 # distro. Buildout will sort it out.
                 return [wf.distribution(location, metadata)]
         # Not a match, short circuit:
@@ -183,20 +203,9 @@ def distros_for_location(location, basename, metadata=None):
     return orig_distros_for_location(location, basename, metadata=metadata)
 
 
-_temp_dirs = []
-
-
 def wheel_to_egg(dist, tmp):
-    # Ignore `tmp`. It could be the download cache and using it for anything
-    # other than creating tempdirs as subdirectories risks collisions
-    # between buildout runs using a shared download cache.
-    # See https://github.com/buildout/buildout/issues/345
-    # Instead, create the egg-like dist in a tempdir and set it to be cleaned
-    # up when the dist goes out of scope.
-    target = tempfile.mkdtemp()
-    _temp_dirs.append(target)
-    dist = WheelDir(dist.location).install_into(target)
-
+    # NOOP, just to make buildout stop complaining.
+    # Installer._call_easy_install() above will handle it.
     return dist
 
 
@@ -211,9 +220,3 @@ def unload(buildout):
     zc.buildout.easy_install.wheel_to_egg = original_wheel_to_egg
     zc.buildout.easy_install.Installer = orig_Installer
     setuptools.package_index.distros_for_location = orig_distros_for_location
-    if _temp_dirs:
-        logger.debug('Cleaning up temporary directories...')
-        for temp_dir in _temp_dirs:
-            shutil.rmtree(temp_dir)
-        del _temp_dirs[:]
-        logger.debug('Done.')
