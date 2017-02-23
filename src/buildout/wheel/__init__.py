@@ -88,7 +88,7 @@ class Installer(orig_Installer):
             # `setuptools.archive_util.unpack_archive` into unpacking wheels
             # which requirs dealing with
             # `setuptools.archive_util.unpack_archive.default_filter`.
-            dist = WheelDir(spec).install_into(tmp)
+            dist = WheelInstaller(spec).install_into(tmp)
             move = zc.buildout.easy_install._move_to_eggs_dir_and_compile
             newloc = move(dist, dest)
             return pkg_resources.Environment([newloc])[dist.project_name]
@@ -96,43 +96,53 @@ class Installer(orig_Installer):
             shutil.rmtree(tmp)
 
 
-class WheelDir(wheel.install.WheelFile):
+class WheelInstaller(object):
     """
-    WheelFile that can:
+    A WheelFile adapter that can:
 
      * return a DistInfoDistribution that buildout can install
 
-     * install itself into a directory and return the respective
+     * install the wheel into a directory and return the respective
        `DistInfoDistribution`.
     """
 
     _dist_extension = '.dist'
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, location):
         # use pip's notion of supported tags, not wheel's:
-        kwargs.setdefault('context', pip.pep425tags.get_supported)
-        super(WheelDir, self).__init__(*args, **kwargs)
+        context = pip.pep425tags.get_supported
+        try:
+            self.wheel = wheel.install.WheelFile(location, context=context)
+        except wheel.install.BadWheelFile:
+            self.wheel = False
+
+    @property
+    def compatible(self):
+        return self.wheel and self.wheel.compatible
 
     def install_into(self, target):
-        p = os.path
-        distname = (p.splitext(p.basename(self.filename))[0] +
-                    self._dist_extension)
-        location = p.join(target, distname)
-        # drop everything inside the metadata directory, keyed by section name,
-        # except the code itself:
+        """
+        Installs a wheel as a self contained distribution into target
+        """
+        basename = os.path.splitext(os.path.basename(self.wheel.filename))[0]
+        distname = basename + self._dist_extension
+        location = os.path.join(target, distname)
+        distinfo_location = os.path.join(location, self.wheel.distinfo_name)
+        # drop everything inside the .dist-info directory, keyed by section
+        # name, except the code itself:
         overrides = {
             key: (location if key in ('platlib', 'purelib')
-                  else p.join(location, self.distinfo_name, key))
+                  else os.path.join(distinfo_location, key))
             for key in distutils.command.install.SCHEME_KEYS
         }
-        self.install(overrides=overrides)
+        self.wheel.install(overrides=overrides)
 
         metadata = pkg_resources.PathMetadata(
-            location, p.join(location, self.distinfo_name)
+            location, os.path.join(location, self.wheel.distinfo_name)
         )
         # Fix namespaces missing __init__ for Python 2 since we're not feeding
-        # the wheel dirs to `site.addsitedir()` and so will ignore .pth files
-        # in the wheel dirs.
+        # the wheel dirs to `site.addsitedir()` and so Python will ignore .pth
+        # files in the wheel dirs.
         if (sys.version_info < (3, 3) and
                 metadata.has_metadata('namespace_packages.txt')):
             self._plant_namespace_declarations(location, metadata)
@@ -140,18 +150,23 @@ class WheelDir(wheel.install.WheelFile):
         return self.distribution(location, metadata=metadata,
                                  precedence=pkg_resources.EGG_DIST)
 
-    def _plant_namespace_declarations(self, root, metadata):
+    @staticmethod
+    def _plant_namespace_declarations(root, metadata):
         base = [root]
         init = ['__init__.py']
         for namespace in metadata.get_metadata_lines('namespace_packages.txt'):
-            __init__filename = base + namespace.split('.') + init
-            dest = os.path.join(*__init__filename)
-            if not os.path.exists(dest):
-                shutil.copyfile(NAMESPACE_STUB_PATH, dest)
+            __init__filename = os.path.join(*(
+                base + namespace.split('.') + init
+            ))
+            if not os.path.exists(__init__filename):
+                shutil.copyfile(NAMESPACE_STUB_PATH, __init__filename)
 
     @wheel.decorator.reify
     def distribution_info(self):
-        info = self.parsed_filename.groupdict()
+        """
+        Parsed info from the wheel name, with a setuptools compatible platform
+        """
+        info = self.wheel.parsed_filename.groupdict()
         if info['plat'] == 'any' and info['abi'] == 'none':
             # Pure Python
             info['plat'] = None
@@ -167,11 +182,11 @@ class WheelDir(wheel.install.WheelFile):
             info['plat'] = 'incompatible'
         return info
 
-    def distribution(self, location=None, metadata=None,
+    def distribution(self, location, metadata=None,
                      precedence=pkg_resources.BINARY_DIST):
         info = self.distribution_info
         return pkg_resources.DistInfoDistribution(
-            location=location if location is not None else self.filename,
+            location=location,
             metadata=metadata,
             project_name=info['name'],
             version=info['ver'],
@@ -186,18 +201,14 @@ def distros_for_location(location, basename, metadata=None):
     """
     Yield egg or source distribution objects based on basename.
 
-    Here we override to give wheels a chance.
+    Here we override setuptools to give wheels a chance.
     """
     if basename.endswith('.whl'):
-        try:
-            wf = WheelDir(basename)
-        except wheel.install.BadWheelFile:
-            pass
-        else:
-            if wf.compatible:
-                # It's a match. Treat it as a binary
-                # distro. Buildout will sort it out.
-                return [wf.distribution(location, metadata)]
+        wi = WheelInstaller(basename)
+        if wi.compatible:
+            # It's a match. Treat it as a binary
+            # distro. Buildout will sort it out.
+            return [wi.distribution(location, metadata)]
         # Not a match, short circuit:
         return ()
     return orig_distros_for_location(location, basename, metadata=metadata)
