@@ -6,7 +6,7 @@ python:
   - 3.5
   - 3.4
 install:
-  - pip install -U pip setuptools zc.buildout
+  - pip install -U pip setuptools git+https://github.com/buildout/buildout.git@encapsulate-easy-install-env#egg=zc.buildout
   - buildout parts=test
 script: bin/test
 cache:
