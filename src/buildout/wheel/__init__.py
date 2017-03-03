@@ -19,20 +19,10 @@ assert os.path.isfile(NAMESPACE_STUB_PATH)
 
 
 orig_distros_for_location = setuptools.package_index.distros_for_location
-original_wheel_to_egg = zc.buildout.easy_install.wheel_to_egg
-orig_Installer = zc.buildout.easy_install.Installer
 
 
-class Installer(orig_Installer):
-    """
-    zc.buildout.easy_install.Installer class that knows how to install `wheels`
-    """
-
-    def _call_easy_install(self, spec, dest):
-        if not spec.endswith('.whl'):
-            orig_Installer._call_easy_install(spec, dest)
-        location = WheelInstaller(spec).install_into(dest)
-        return [location]
+def unpack_wheel(spec, dest):
+    WheelInstaller(spec).install_into(dest)
 
 
 class WheelInstaller(object):
@@ -146,20 +136,14 @@ def distros_for_location(location, basename, metadata=None):
     return orig_distros_for_location(location, basename, metadata=metadata)
 
 
-def wheel_to_egg(dist, tmp):
-    # NOOP, just to make buildout stop complaining.
-    # Installer._call_easy_install() above will handle it.
-    return dist
-
-
 def load(buildout):
     setuptools.package_index.distros_for_location = distros_for_location
-    zc.buildout.easy_install.Installer = Installer
-    zc.buildout.easy_install.wheel_to_egg = wheel_to_egg
+    buildout.old_unpack_wheel = zc.buildout.easy_install.UNPACKERS.get('.whl')
+    zc.buildout.easy_install.UNPACKERS['.whl'] = unpack_wheel
     logger.debug('Patched in wheel support')
 
 
 def unload(buildout):
-    zc.buildout.easy_install.wheel_to_egg = original_wheel_to_egg
-    zc.buildout.easy_install.Installer = orig_Installer
+    if buildout.old_unpack_wheel is not None:
+        zc.buildout.easy_install.UNPACKERS['.whl'] = buildout.old_unpack_wheel
     setuptools.package_index.distros_for_location = orig_distros_for_location
