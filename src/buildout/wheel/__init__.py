@@ -34,7 +34,7 @@ class WheelInstaller(object):
      * install the wheel into a directory to be added to `sys.path`
     """
 
-    _dist_extension = '.dist'
+    _dist_extension = '.ovo'
     wheel = None
 
     def __init__(self, location):
