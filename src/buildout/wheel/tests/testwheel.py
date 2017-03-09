@@ -1,11 +1,16 @@
 import os
-import pkg_resources
 import shutil
 import sys
-import tempfile
 import unittest
+import pkg_resources
 import zc.buildout.easy_install
 import zc.buildout.testing
+
+
+class Buildout(object):
+    """ Object to pass into the `load()` entry point during tests
+    """
+
 
 class BuildoutWheelTests(unittest.TestCase):
 
@@ -38,9 +43,15 @@ class BuildoutWheelTests(unittest.TestCase):
             [py, 'setup.py', 'bdist_wheel', '-d', eggs])
         os.chdir(join('..'))
 
-        import pkg_resources
+        buildout = Buildout()
         pkg_resources.load_entry_point(
-            'buildout.wheel', 'zc.buildout.extension', 'wheel')(None)
+            'buildout.wheel', 'zc.buildout.extension', 'wheel')(buildout)
+
+        @self.register_teardown
+        def unload():
+            pkg_resources.load_entry_point(
+                'buildout.wheel', 'zc.buildout.unloadextension', 'wheel'
+            )(buildout)
 
         ws = zc.buildout.easy_install.install(
             ['demo', 'extdemo'],
