@@ -2,7 +2,7 @@
 Changes
 =======
 
-0.2.0 (unreleased)
+0.2.0 (2017-03-12)
 ==================
 
 - Make use of newer support in buildout for per-extension binary dist UNPACKERs
